@@ -115,6 +115,7 @@ begin
 						when "101" => null;
 						when "110" => null;
 						when "111" => din <= data_in; ctrl_state <= RAM_INCA;
+                                                when others => null;
 					end case;
 				else
 					if (addr = "110") then

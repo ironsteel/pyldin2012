@@ -7,21 +7,15 @@ entity pyldin2012 is
 port(
 	clk						: in    std_logic;
 	rst						: in    std_logic;
+        clk25				: in std_logic;
 
-	vga_r               	: out   std_logic_vector(2 downto 0);
-	vga_g               	: out   std_logic_vector(2 downto 0);
-	vga_b               	: out   std_logic_vector(1 downto 0);
+	vga_r               	: out   std_logic_vector(7 downto 0);
+	vga_g               	: out   std_logic_vector(7 downto 0);
+	vga_b               	: out   std_logic_vector(7 downto 0);
 	vga_hs              	: out   std_logic;
 	vga_vs              	: out   std_logic;
+	vga_de              	: out   std_logic;
 		
-	sram_addr           	: out   std_logic_vector(17 downto 0);
-	sram_dq             	: inout std_logic_vector(15 downto 0);
-	sram_ce_n           	: out   std_logic;
-	sram_oe_n           	: out   std_logic;
-	sram_we_n           	: out   std_logic;
-	sram_ub_n           	: out   std_logic;
-	sram_lb_n           	: out   std_logic;
-
 	led_capslock			: out	  std_logic;
 	led_latkir				: out   std_logic;
 	speaker_port			: out   std_logic;
@@ -37,13 +31,33 @@ port(
 	swt						: in	  std_logic;
 	step						: in	  std_logic;
 	ledseg					: out	  std_logic_vector(7 downto 0);
-	ledcom					: out	  std_logic_vector(7 downto 0)
---	keys						: in    std_logic_vector(2 downto 0)
+	ledcom					: out	  std_logic_vector(7 downto 0);
+        ram_hold			: out std_logic;
+        mux_ram_cs			: out std_logic;
+        mux_ram_rw		: out std_logic;
+        mux_ram_page		: out std_logic_vector(2 downto 0);
+        mux_ram_addr		: out std_logic_vector(15 downto 0);
+        mux_ram_data_in	        : out std_logic_vector(7 downto 0);
+        mux_ram_data_out	: in std_logic_vector(7 downto 0);
+        mux_ram_read	: out std_logic
 );
 end pyldin2012;
 
 architecture pyldin_arch of pyldin2012 is
-signal clk25				: std_logic;
+--component ram
+--port(
+--	clk						: in std_logic;
+--
+--	rw							: in std_logic;
+--	page						: in std_logic_vector(2 downto 0);
+--	addr        			: in std_logic_vector(15 downto 0);
+--	data_in     			: in std_logic_vector(7 downto 0);
+--	data_out   			 	: out std_logic_vector(7 downto 0);
+--	cs   			 	: in std_logic
+--);
+--end component;
+
+--signal clk25				: std_logic;
 signal rst_cnt				: std_logic_vector(3 downto 0) := "1111";
 signal sys_rst				: std_logic := '1';
 signal sys_clk				: std_logic;
@@ -75,7 +89,7 @@ signal rombios_data_out : std_logic_vector(7 downto 0);
 
 -- ram
 signal ram_cs          	: std_logic; -- memory chip select
-signal ram_hold			: std_logic;
+--signal ram_hold			: std_logic;
 signal ram_data_out    	: std_logic_vector(7 downto 0);
 
 -- video ram
@@ -86,15 +100,14 @@ signal vram_addr			: std_logic_vector(15 downto 0);
 signal vram_data_out		: std_logic_vector( 7 downto 0);
 
 -- ram mux
-signal mux_ram_cs			: std_logic;
-signal mux_ram_rw			: std_logic;
-signal mux_ram_page		: std_logic_vector(2 downto 0);
-signal mux_ram_addr		: std_logic_vector(15 downto 0);
-signal mux_ram_data_in	: std_logic_vector( 7 downto 0);
-signal mux_ram_data_out	: std_logic_vector( 7 downto 0);
-type type_states	is (Idle, Addr, Read, Write, WrtEnd);
+--signal mux_ram_cs			: std_logic;
+--signal mux_ram_rw			: std_logic;
+--signal mux_ram_page		: std_logic_vector(2 downto 0);
+--signal mux_ram_addr		: std_logic_vector(15 downto 0);
+--signal mux_ram_data_in	: std_logic_vector( 7 downto 0);
+--signal mux_ram_data_out	: std_logic_vector( 7 downto 0);
+type type_states	is (Idle, Addr, Read, ReadMid, ReadEnd, Write, WriteMid, WriteEnd);
 signal ram_state			: type_states;
-signal mux_ram_rw_tmp	: std_logic;
 
 -- IO selector
 signal ds0_cs				: std_logic;
@@ -149,6 +162,7 @@ signal step_debouncer	: std_logic_vector(24 downto 0);
 begin
 
 	cpu_hold <= ram_hold;
+        --sys_rst <= rst;
 
 	clock25: process (clk, rst)
 	begin
@@ -156,8 +170,9 @@ begin
 			if (rst = '0') then
 				rst_cnt <= "0100";
 				sys_rst <= '1';
+				--clk25 <= '0';
 			else
-				clk25 <= not clk25;
+				--clk25 <= not clk25;
 				if (sys_clk = '1') then
 					if (rst_cnt = "0000") then
 						sys_rst <= '0';
@@ -220,12 +235,12 @@ begin
 	end process;
 	
 	mc6800 : entity work.cpu68 port map(
-		clk		=> sys_clk,
+	        clk		=> sys_clk,
 		rst		=> cpu_reset,
-		rw			=> cpu_rw,
+		rw		=> cpu_rw,
 		vma		=> cpu_vma,
-		address	=> cpu_addr(15 downto 0),
-		data_in	=> cpu_data_in,
+		address	        => cpu_addr(15 downto 0),
+		data_in	        => cpu_data_in,
 		data_out	=> cpu_data_out,
 		hold		=> cpu_hold,
 		halt		=> cpu_halt,
@@ -240,23 +255,15 @@ begin
 		data		=> rombios_data_out
 	);
 
-	ram: entity work.SRAM port map (
-		clk 			=> sys_clk,
-		rst 			=> not sys_rst,
-		sram_addr 	=> sram_addr,
-		sram_dq 		=> sram_dq,
-		sram_ce_n 	=> sram_ce_n,
-		sram_oe_n 	=> sram_oe_n,
-		sram_we_n 	=> sram_we_n,
-		sram_ub_n 	=> sram_ub_n,
-		sram_lb_n 	=> sram_lb_n,
-		cs 			=> mux_ram_cs,
-		rw 			=> mux_ram_rw,
-		page			=> mux_ram_page,
-		addr 			=> mux_ram_addr,
-		data_in 		=> mux_ram_data_in,
-		data_out 	=> mux_ram_data_out
-	);
+	--rami: ram port map (
+	--	clk 			=> clk,
+	--	rw 			=> mux_ram_rw,
+	--	page			=> mux_ram_page,
+	--	addr 			=> mux_ram_addr,
+	--	data_in 		=> mux_ram_data_in,
+	--	data_out 	        => mux_ram_data_out,
+        --        cs                      => mux_ram_cs
+	--);
 	
 	mc6845: entity work.vga6845 port map (
 		rst		=> sys_rst,
@@ -266,7 +273,7 @@ begin
 		rs  		=> cpu_addr(0),
 		data_in	=> cpu_data_out,
 		data_out	=> ds0_data_out,
-		vmode		=> video_mode,
+		v_mode		=> video_mode,
 		vaddr_out=> vram_addr,
 		vdata_in	=> mux_ram_data_out,
 		vdata_en	=> vram_cs,
@@ -274,10 +281,11 @@ begin
 		vga_g		=> vga_g,
 		vga_b		=> vga_b,
 		vga_hs	=> vga_hs,
-		vga_vs	=> vga_vs
+		vga_vs	=> vga_vs,
+		vga_de	=> vga_de
 	);
 
-	sdcard: entity work.sd_controller port map (
+	/*sdcard: entity work.sd_controller port map (
 		reset		=> sys_rst,
 		clk		=> sys_clk,
 		cs			=> ds6_cs,
@@ -289,12 +297,12 @@ begin
 		mmc_ck	=> mmc_ck,
 		mmc_di	=> mmc_di,
 		mmc_do	=> mmc_do
-	);
+	);*/
 	
 	keybrd: entity work.keyboard port map (
 		rst		=> sys_rst,
 		clk		=> sys_clk,
-		ps2_clk	=> ps2_kbd_clk,
+		ps2_clk	        => ps2_kbd_clk,
 		ps2_data	=> ps2_kbd_data,
 		irq		=> keyboard_irq,
 		ack		=> keyboard_ack,
@@ -302,13 +310,13 @@ begin
 		data		=> keyboard_data
 	);
 	
-	segdisplay : entity work.segleds port map(
+	/*segdisplay : entity work.segleds port map(
 		clk		=> clk,
 		rst		=> not sys_rst,
 		ledseg	=> ledseg,
 		ledcom	=> ledcom,
 		data		=> led_data
-	);
+	);*/
 	
 	ds5hexout : process (cpu_addr, cpu_rw, cpu_data_out, ds5_cs, ds5_data_in, sys_clk)
 	begin
@@ -320,6 +328,7 @@ begin
 						when "01" => ds5_data_in(23 downto 16) <= cpu_data_out;
 						when "10" => ds5_data_in(15 downto 8 ) <= cpu_data_out;
 						when "11" => ds5_data_in( 7 downto 0 ) <= cpu_data_out;
+                                                when others => null;
 					end case;
 				else
 					case (cpu_addr(1 downto 0)) is
@@ -327,6 +336,7 @@ begin
 						when "01" => ds5_data_out <= ds5_data_in(23 downto 16);
 						when "10" => ds5_data_out <= ds5_data_in(15 downto 8 );
 						when "11" => ds5_data_out <= ds5_data_in( 7 downto 0 );
+                                                when others => null;
 					end case;
 				end if;
 			end if;
@@ -381,6 +391,9 @@ begin
 					when "111" =>
 						ds0_cs <= '0'; ds1_cs <= '0'; ds2_cs <= '0'; ds3_cs <= '0'; ds4_cs <= '0'; ds5_cs <= '0'; ds6_cs <= '0'; ds7_cs <= cpu_vma;
 						cpu_data_in <= ds7_data_out;
+                                        when others => 
+						ds0_cs <= '0'; ds1_cs <= '0'; ds2_cs <= '0'; ds3_cs <= '0'; ds4_cs <= '0'; ds5_cs <= '0'; ds6_cs <= '0'; ds7_cs <= '0';
+						cpu_data_in <= x"00";
 					end case;
 
 					rombios_cs <= '0';
@@ -405,6 +418,7 @@ begin
 			if (sys_rst = '1') then
 				ram_state <= Idle;
 				ram_hold <= '0';
+                                mux_ram_read <= '0';
 			elsif ((vram_cs = '1') and (swt = '0')) then
 				if (ram_cs = '1') then
 					ram_hold <= '1';
@@ -412,6 +426,7 @@ begin
 				end if;
 				mux_ram_cs <= '1'; -- vram_cs;
 				mux_ram_rw <= '1'; -- vram_rw; -- read-only
+                                mux_ram_read <= '1';
 				mux_ram_addr <= vram_addr;
 			else
 				if ((cpu_addr(15 downto 13) = "110" and rampage_ctrl(3) = '1') and (not (rampage_lock = '1' and cpu_rw = '0'))) then
@@ -430,18 +445,38 @@ begin
 						if ((ram_cs = '1') and (cpu_rw = '1')) then
 							ram_hold <= '1';
 							mux_ram_rw <= '1';
+                                                        mux_ram_read <= '1';
 							ram_state <= Read;
 						elsif ((ram_cs = '1') and (cpu_rw = '0')) then
 							ram_hold <= '1';
 							mux_ram_rw <= '0';
 							ram_state <= Write;
+                                                        mux_ram_read <= '0';
 						end if;
-					when Read =>
+                                        when Read =>
+                                                ram_hold <= '1';
+                                                mux_ram_rw <= '1';
+                                                mux_ram_read <= '1';
+                                                ram_state <= ReadMid;
+                                        when ReadMid =>
+                                                ram_hold <= '1';
+                                                mux_ram_rw <= '1';
+                                                ram_state <= ReadEnd;
+                                                mux_ram_read <= '1';
+					when ReadEnd =>
+                                                mux_ram_rw <= '1';
+                                                mux_ram_read <= '0';
 						ram_hold <= '0';
 						ram_state <= Idle;
 					when Write =>
+						ram_hold <= '1';
+						mux_ram_rw <= '0';
+                                                mux_ram_read <= '0';
+						ram_state <= WriteEnd;
+					when WriteEnd =>
 						ram_hold <= '0';
 						mux_ram_rw <= '1';
+                                                mux_ram_read <= '0';
 						ram_state <= Idle;
 					when others =>
 				end case;
@@ -500,6 +535,7 @@ begin
 							when "01" => sysport_drb(6 downto 0) <= cpu_data_out(6 downto 0);
 							when "10" => sysport_cra(6 downto 0) <= cpu_data_out(6 downto 0);
 							when "11" => sysport_crb(6 downto 0) <= cpu_data_out(6 downto 0);
+                                                        when others => null;
 						end case;
 					else
 						case (cpu_addr(1 downto 0)) is
@@ -523,6 +559,7 @@ begin
 									ds1_data_out(7) <= '0';
 									sysport_crb(7)  <= '0';
 								end if;
+                                                        when others => null;
 						end case;
 					end if;
 				end if;

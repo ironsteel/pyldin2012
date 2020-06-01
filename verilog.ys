@@ -1,0 +1,4 @@
+ghdl --std=08 --ieee=synopsys -frelaxed-rules -fexplicit keyboard.vhd vgachargen.vhd segled.vhd rombios.vhd sd.vhd cpu68.vhd vga6845.vhd pyldin2012.vhd -e pyldin2012
+
+prep -top pyldin2012 
+write_verilog verilog.v 

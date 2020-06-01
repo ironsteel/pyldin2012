@@ -5,7 +5,7 @@ use ieee.std_logic_unsigned.all;
 
 entity vga6845 is
 generic(
-	READ_DELAY				: natural := 36
+	READ_DELAY				: natural := 38
 	);
 port(
 	rst						: in std_logic;
@@ -17,15 +17,16 @@ port(
 	data_in					: in std_logic_vector( 7 downto 0);
 	data_out					: out std_logic_vector( 7 downto 0);
 	
-	vmode						: in std_logic;
+	v_mode						: in std_logic;
 	vaddr_out				: out std_logic_vector(15 downto 0);
 	vdata_in					: in std_logic_vector( 7 downto 0);
 	vdata_en					: out std_logic;
 
-	vga_r               	: out std_logic_vector(2 downto 0);
-	vga_g               	: out std_logic_vector(2 downto 0);
-	vga_b               	: out std_logic_vector(1 downto 0);
-
+	vga_r               	: out std_logic_vector(7 downto 0);
+	vga_g               	: out std_logic_vector(7 downto 0);
+	vga_b               	: out std_logic_vector(7 downto 0);
+ 
+	vga_de              	: out std_logic;
 	vga_hs              	: out std_logic;
 	vga_vs              	: out std_logic
 );
@@ -41,6 +42,7 @@ signal char_addr			: std_logic_vector(10 downto 0);
 signal char_data			: std_logic_vector( 7 downto 0);
 
 signal h_sync				: std_logic;
+signal hsync_old				: std_logic;
 signal v_sync				: std_logic;
 signal horizontal_en		: std_logic;
 signal vertical_en		: std_logic;
@@ -71,7 +73,7 @@ begin
 			pix_clk <= h_cnt(0);
 
 			if (h_cnt(0) = '0') then
-				if (vmode = '1') then
+				if (v_mode = '1') then
 					video_addr <= std_logic_vector("101000000"*v_cnt(8 downto 1) + h_cnt(9 downto 1));
 					vaddr_out <= vaddr_base + video_addr(16 downto 3);
 				else
@@ -91,14 +93,21 @@ begin
 			else
 				horizontal_en <= '0';
 			end if;
+                        if ((v_cnt > 480) or ((h_cnt <= (0 + READ_DELAY)) or (h_cnt >= (640 + READ_DELAY)))) then
+                           vga_de <= '0';
+                        else 
+                           vga_de <= '1';
+                        end if;  
 		end if;
 	end process;
 	
-	vsync: process (h_sync, rst)
+	vsync: process (clk, rst)
 	begin
 		if (rst = '1') then
 			v_cnt <= "0000000000";
-		elsif (h_sync'event and h_sync = '1') then
+		elsif (clk'event and clk = '1') then
+                    hsync_old <= h_sync;
+                    if (hsync_old = '0' and h_sync = '1') then
 			if (v_cnt >= 524) then
 				v_cnt <= "0000000000";
 			else
@@ -116,6 +125,7 @@ begin
 			else
 				vertical_en <= '0';
 			end if;
+                    end if;
 		end if;
 	end process;
 	
@@ -123,7 +133,7 @@ begin
 	begin
 		if (clk'event and clk = '0' and pix_clk = '0') then
 			if (h_cnt(3 downto 1) = "000") then
-				if (vmode = '1') then
+				if (v_mode = '1') then
 					data <= vdata_in;
 				else
 					char_addr( 2 downto 0) <= v_cnt(3 downto 1);
@@ -136,15 +146,18 @@ begin
 			end if;
 			pixel <= data(7);
 			if (video_enable = '1') then
---				vga_r(2) <= pixel; 
+				vga_g(7) <= pixel;
+				vga_g(6) <= pixel;
+				vga_g(5) <= pixel;
+				vga_g(4) <= pixel;
+				vga_g(3) <= pixel;
 				vga_g(2) <= pixel;
 				vga_g(1) <= pixel;
 				vga_g(0) <= pixel;
---				vga_b(1) <= pixel;
 			else
-				vga_r <= "000"; 
-				vga_g <= "000";
-				vga_b <= "00";
+				vga_r <= "00000000"; 
+				vga_g <= "00000000";
+				vga_b <= "00000000";
 			end if;
 		end if;
 	end process;
